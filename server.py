@@ -99,7 +99,10 @@ def analyze_image(image_b64):
     """Send image to Gemini and get structured analysis (fast)."""
     api_key = get_gemini_api_key()
     if not api_key:
-        return {"error": "No Gemini API key"}
+        return {"error": "No Gemini API key"}, 0
+
+    import time
+    t0 = time.time()
 
     # Fast model + short prompt
     prompt = "Identify this tech item. Return JSON: {\"category\":\"RAM|Notebook|Monitor|Other\",\"description\":\"brief 1-line\",\"parameters\":{all detectable specs}}. Fill only what you see, empty strings for unknown."
@@ -119,15 +122,16 @@ def analyze_image(image_b64):
         resp = urllib.request.urlopen(req, timeout=30)
         result = json.loads(resp.read())
         text = result["candidates"][0]["content"]["parts"][0]["text"]
-        # Extract JSON from response
         json_match = re.search(r'\{.*\}', text, re.DOTALL)
         if json_match:
-            return json.loads(json_match.group())
-        return {"error": "No JSON in response", "raw": text[:200]}
+            parsed = json.loads(json_match.group())
+            parsed["timing"] = {"gemini_ms": int((time.time() - t0) * 1000)}
+            return parsed, int((time.time() - t0) * 1000)
+        return {"error": "No JSON in response", "raw": text[:200]}, int((time.time() - t0) * 1000)
     except urllib.error.HTTPError as e:
-        return {"error": f"API HTTP {e.code}: {e.read().decode()[:200]}"}
+        return {"error": f"API HTTP {e.code}: {e.read().decode()[:200]}"}, int((time.time() - t0) * 1000)
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": str(e)}, int((time.time() - t0) * 1000)
 
 def generate_advert(params, template):
     """Generate advert description from filled template."""
@@ -244,12 +248,12 @@ class AdvertHandler(SimpleHTTPRequestHandler):
             json.dump(photo_list, f, indent=2)
 
         # Analyze with Gemini
-        self._json({"ok": True, "status": "analyzing", "photo": entry, "message": "Analyzing photo..."}, origin)
-
-        analysis = analyze_image(photo_b64)
+        t0 = __import__('time').time()
+        analysis, gemini_ms = analyze_image(photo_b64)
+        total_ms = int((__import__('time').time() - t0) * 1000)
 
         if "error" in analysis:
-            self._json({"ok": False, "error": analysis["error"]}, origin)
+            self._json({"ok": False, "error": analysis["error"], "timing": {"gemini_ms": gemini_ms, "total_ms": total_ms}}, origin)
             return
 
         category = analysis.get("category", "Other")
@@ -277,6 +281,7 @@ class AdvertHandler(SimpleHTTPRequestHandler):
             "filled": filled,
             "description": analysis.get("description", ""),
             "photo": entry,
+            "timing": {"gemini_ms": gemini_ms, "total_ms": total_ms},
         }
         self._json(result, origin)
 
