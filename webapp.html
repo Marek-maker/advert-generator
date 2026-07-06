@@ -245,7 +245,7 @@
         // ── Globals ────────────────────────────────────────
         // Backend: currently your local server, will move to Render later
         var IS_NETLIFY = window.location.hostname.indexOf('netlify.app') !== -1;
-        var RENDER_BACKEND = 'https://advert-generator-backend.onrender.com'; // Render backend
+        var RENDER_BACKEND = 'https://MarekMaker.pythonanywhere.com'; // PythonAnywhere backend
         var BASE_URL = IS_NETLIFY && RENDER_BACKEND ? RENDER_BACKEND : window.location.protocol + '//' + window.location.host;
         var tg = null, currentPhotoB64 = null, currentPhotoMeta = null;
         var currentCategory = null, currentFields = null, currentFilled = {};

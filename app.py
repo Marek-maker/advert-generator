@@ -3,11 +3,17 @@ Advert Generator — Flask app for PythonAnywhere
 """
 import os, sys, json, uuid, base64, re, urllib.request, urllib.error, time
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app)
+
+# Manual CORS (avoid flask_cors dependency)
+@app.after_request
+def add_cors(resp):
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Bypass-Tunnel-Reminder, X-Requested-With"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+    return resp
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_PATH = os.path.join(BASE_DIR, "data", "biznis_index.json")
