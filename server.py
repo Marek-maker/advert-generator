@@ -324,6 +324,10 @@ class AdvertHandler(SimpleHTTPRequestHandler):
             self.send_error(404)
 
     def do_GET(self):
+        # Health check for Render
+        if self.path in ("/", "/health"):
+            self._json({"ok": True, "status": "alive", "service": "advert-generator"}, None)
+            return
         if self.path.startswith("/uploads/"):
             fname = self.path[len("/uploads/"):]
             fpath = os.path.join(UPLOAD_DIR, fname)
