@@ -1,0 +1,8 @@
+node_modules/
+uploads/
+adverts/
+__pycache__/
+*.pyc
+.env
+*_backup.zip
+tg_payload.json

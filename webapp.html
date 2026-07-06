@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Advert Generator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--tg-theme-bg-color, #fff);
+            color: var(--tg-theme-text-color, #222);
+            padding: 14px;
+            min-height: 100vh;
+        }
+        h1 { font-size: 20px; margin-bottom: 2px; }
+        .sub { font-size: 13px; opacity: 0.5; margin-bottom: 14px; }
+
+        .step-indicator {
+            display: flex;
+            gap: 6px;
+            margin: 8px 0 14px 0;
+        }
+        .step-dot {
+            flex: 1;
+            height: 4px;
+            border-radius: 2px;
+            background: #ddd;
+            transition: background 0.3s;
+        }
+        .step-dot.active { background: var(--tg-theme-button-color, #2481cc); }
+        .step-dot.done { background: #27ae60; }
+
+        .screen { display: none; }
+        .screen.active { display: block; }
+
+        .card {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 10px 0;
+        }
+        .card h2 { font-size: 15px; margin-bottom: 8px; }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 4px 0;
+            background: var(--tg-theme-button-color, #2481cc);
+            color: var(--tg-theme-button-text-color, #fff);
+            transition: opacity 0.2s;
+        }
+        button:active { opacity: 0.8; }
+        button:disabled { opacity: 0.4; cursor: default; }
+        button.gr { background: #27ae60; }
+        button.rd { background: #e74c3c; }
+        button.gy { background: #888; }
+        button.or { background: #f39c12; }
+
+        .cam-input { display: none; }
+
+        #photo-preview {
+            width: 100%;
+            border-radius: 10px;
+            margin: 8px 0;
+        }
+
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #ddd;
+            border-top-color: var(--tg-theme-button-color, #2481cc);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .label { font-size: 13px; font-weight: 600; margin: 8px 0 4px 0; }
+        input, textarea, select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--tg-theme-hint-color, #ccc);
+            border-radius: 8px;
+            font-size: 14px;
+            background: var(--tg-theme-bg-color, #fff);
+            color: var(--tg-theme-text-color, #222);
+            outline: none;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--tg-theme-button-color, #2481cc);
+        }
+        textarea { resize: vertical; min-height: 80px; font-family: inherit; }
+
+        .cat-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin: 4px 0;
+        }
+        .cat-RAM { background: #e8f5e9; color: #2e7d32; }
+        .cat-Notebook { background: #e3f2fd; color: #1565c0; }
+        .cat-Monitor { background: #fce4ec; color: #c62828; }
+        .cat-Other { background: #f3e5f5; color: #6a1b9a; }
+
+        #result {
+            padding: 10px; border-radius: 8px; margin: 6px 0;
+            display: none; font-size: 13px; text-align: center;
+        }
+        #result.show { display: block; background: rgba(0,150,0,0.1); }
+        #result.err { background: rgba(255,0,0,0.1); color: #c00; }
+
+        #desc-box {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 12px;
+            white-space: pre-wrap;
+            font-size: 13px;
+            line-height: 1.5;
+            min-height: 100px;
+        }
+        #desc-box[contenteditable="true"] {
+            border-color: var(--tg-theme-button-color, #2481cc);
+        }
+
+        .row { display: flex; gap: 8px; }
+        .row button { flex: 1; }
+
+        #loading-text { text-align: center; font-size: 14px; color: #888; margin: 10px 0; }
+
+        #log {
+            background: #0d1117; color: #00ff88;
+            font-family: 'Courier New', monospace;
+            font-size: 11px; padding: 8px; border-radius: 8px;
+            margin: 6px 0; max-height: 80px; overflow-y: auto;
+            display: none; white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="title">📸 Advert Generator</h1>
+    <p class="sub">Snap → Analyze → Edit → Generate → Save</p>
+
+    <div class="step-indicator" id="steps">
+        <div class="step-dot active" id="s1"></div>
+        <div class="step-dot" id="s2"></div>
+        <div class="step-dot" id="s3"></div>
+        <div class="step-dot" id="s4"></div>
+        <div class="step-dot" id="s5"></div>
+    </div>
+
+    <!-- ══════ STEP 1: CAMERA ══════ -->
+    <div class="screen active" id="screen-camera">
+        <div class="card">
+            <h2>📸 Take a Photo</h2>
+            <p style="font-size:13px;opacity:0.6;margin-bottom:8px;">
+                Snap a photo of the item you want to sell (RAM, notebook, monitor, etc.)
+            </p>
+            <input type="file" id="cam-input" class="cam-input" accept="image/*" capture="environment">
+            <button onclick="openCam()">📸 Snap Photo</button>
+            <button class="gy" onclick="pickFile()">📁 Pick from Gallery</button>
+            <img id="photo-preview" style="display:none">
+        </div>
+    </div>
+
+    <!-- ══════ STEP 2: ANALYZING ══════ -->
+    <div class="screen" id="screen-analyzing">
+        <div class="card" style="text-align:center">
+            <div class="spinner"></div>
+            <h2>🔍 Analyzing...</h2>
+            <p id="loading-text">Sending photo to AI vision...</p>
+        </div>
+    </div>
+
+    <!-- ══════ STEP 3: RESULTS + FORM ══════ -->
+    <div class="screen" id="screen-form">
+        <div class="card">
+            <h2>📋 Detected Item</h2>
+            <p id="detected-cat" style="font-size:14px;margin:4px 0;"></p>
+            <p id="detected-desc" style="font-size:13px;opacity:0.7;"></p>
+        </div>
+        <div class="card">
+            <h2>✏️ Parameters</h2>
+            <div id="form-fields"></div>
+        </div>
+        <button class="or" onclick="stepGenerate()">🚀 Generate Advert</button>
+    </div>
+
+    <!-- ══════ STEP 4: GENERATE ══════ -->
+    <div class="screen" id="screen-generate">
+        <div class="card">
+            <h2>📝 Advert Description</h2>
+            <p style="font-size:12px;opacity:0.5;margin-bottom:6px;">
+                You can edit the description directly
+            </p>
+            <div id="desc-box" contenteditable="true"></div>
+        </div>
+        <div class="row">
+            <button onclick="stepBack()">◀ Back</button>
+            <button class="gr" onclick="stepSave()">💾 Save Advert</button>
+        </div>
+    </div>
+
+    <!-- ══════ STEP 5: SAVED ══════ -->
+    <div class="screen" id="screen-saved">
+        <div class="card" style="text-align:center;padding:30px;">
+            <h2>✅ Saved!</h2>
+            <p id="save-info" style="margin:10px 0;font-size:14px;"></p>
+            <button onclick="resetAll()">🔄 New Advert</button>
+        </div>
+    </div>
+
+    <div id="result"></div>
+    <div id="log"></div>
+
+    <script src="https://telegram.org/js/telegram-web-app.js" async
+            onload="onSDK()" onerror="">
+    </script>
+    <script>
+        // ── Globals ────────────────────────────────────────
+        var BASE_URL = window.location.protocol + '//' + window.location.host;
+        var tg = null, currentPhotoB64 = null, currentPhotoMeta = null;
+        var currentCategory = null, currentFields = null, currentFilled = {};
+
+        // ── Step navigation ─────────────────────────────────
+        function goToStep(n) {
+            var screens = ['camera','analyzing','form','generate','saved'];
+            for (var i = 0; i < screens.length; i++) {
+                document.getElementById('screen-' + screens[i]).classList.toggle('active', i+1 === n);
+                document.getElementById('s' + (i+1)).className = 'step-dot' +
+                    (i+1 === n ? ' active' : '') +
+                    (i+1 < n ? ' done' : '');
+            }
+        }
+
+        function resetAll() {
+            currentPhotoB64 = null;
+            currentPhotoMeta = null;
+            currentCategory = null;
+            currentFields = null;
+            currentFilled = {};
+            document.getElementById('photo-preview').style.display = 'none';
+            document.getElementById('form-fields').innerHTML = '';
+            document.getElementById('desc-box').innerHTML = '';
+            goToStep(1);
+        }
+
+        // ── Camera ─────────────────────────────────────────
+        function openCam() {
+            var input = document.getElementById('cam-input');
+            input.value = '';
+            input.click();
+        }
+        function pickFile() {
+            var input = document.getElementById('cam-input');
+            input.value = '';
+            input.removeAttribute('capture');
+            input.click();
+            input.setAttribute('capture', 'environment');
+        }
+
+        document.getElementById('cam-input').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(ev) {
+                currentPhotoB64 = ev.target.result;
+                var preview = document.getElementById('photo-preview');
+                preview.src = currentPhotoB64;
+                preview.style.display = 'block';
+                startAnalysis();
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // ── Analyze ────────────────────────────────────────
+        function startAnalysis() {
+            goToStep(2);
+            document.getElementById('loading-text').textContent = 'Sending photo to AI vision...';
+
+            var payload = JSON.stringify({ photos: [currentPhotoB64], total: 1 });
+
+            fetch(BASE_URL + '/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) {
+                    document.getElementById('loading-text').textContent = '❌ ' + (data.error || 'Analysis failed');
+                    return;
+                }
+                if (data.status === 'analyzing') {
+                    document.getElementById('loading-text').textContent = '⏳ Waiting for AI results...';
+                    // Poll for result (re-upload same photo)
+                    setTimeout(function() { startAnalysis(); }, 2000);
+                    return;
+                }
+                showForm(data);
+            })
+            .catch(function(err) {
+                document.getElementById('loading-text').textContent = '❌ Network error: ' + err.message;
+            });
+        }
+
+        // ── Show Form ───────────────────────────────────────
+        function showForm(data) {
+            currentCategory = data.category;
+            currentFields = data.fields;
+            currentFilled = data.filled || {};
+            currentPhotoMeta = data.photo;
+
+            document.getElementById('detected-cat').innerHTML =
+                '<span class="cat-badge cat-' + data.category + '">' +
+                (data.emoji || '📦') + ' ' + data.category + '</span>';
+            document.getElementById('detected-desc').textContent = data.description || '';
+
+            // Build form
+            var html = '';
+            for (var i = 0; i < data.fields.length; i++) {
+                var f = data.fields[i];
+                var val = currentFilled[f.key] || f.default || '';
+
+                html += '<div class="label">' + f.label + '</div>';
+
+                if (f.type === 'select') {
+                    html += '<select id="field-' + f.key + '">';
+                    for (var j = 0; j < f.options.length; j++) {
+                        var opt = f.options[j];
+                        html += '<option value="' + opt + '"' + (opt === val ? ' selected' : '') + '>' + opt + '</option>';
+                    }
+                    html += '</select>';
+                } else if (f.type === 'textarea') {
+                    html += '<textarea id="field-' + f.key + '" rows="3">' + htmlEncode(val) + '</textarea>';
+                } else if (f.type === 'number') {
+                    html += '<input type="number" id="field-' + f.key + '" value="' + val + '" step="0.01">';
+                } else {
+                    html += '<input type="text" id="field-' + f.key + '" value="' + htmlEncode(val) + '">';
+                }
+            }
+            document.getElementById('form-fields').innerHTML = html;
+            goToStep(3);
+        }
+
+        function htmlEncode(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        // ── Generate Advert ────────────────────────────────
+        function stepGenerate() {
+            // Collect all field values
+            var params = {};
+            for (var i = 0; i < currentFields.length; i++) {
+                var f = currentFields[i];
+                var el = document.getElementById('field-' + f.key);
+                params[f.key] = el ? el.value : '';
+            }
+
+            goToStep(2);
+            document.getElementById('loading-text').textContent = '✍️ Generating advert description...';
+
+            var payload = JSON.stringify({ category: currentCategory, params: params });
+
+            fetch(BASE_URL + '/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) {
+                    document.getElementById('loading-text').textContent = '❌ ' + (data.error || 'Generation failed');
+                    return;
+                }
+                document.getElementById('desc-box').textContent = data.description || 'No description generated.';
+                goToStep(4);
+            })
+            .catch(function(err) {
+                document.getElementById('loading-text').textContent = '❌ Error: ' + err.message;
+            });
+        }
+
+        // ── Save ────────────────────────────────────────────
+        function stepSave() {
+            // Collect params
+            var params = {};
+            for (var i = 0; i < currentFields.length; i++) {
+                var f = currentFields[i];
+                var el = document.getElementById('field-' + f.key);
+                params[f.key] = el ? el.value : '';
+            }
+
+            var desc = document.getElementById('desc-box').textContent || '';
+            var payload = JSON.stringify({
+                category: currentCategory,
+                params: params,
+                description: desc,
+                photo: currentPhotoMeta
+            });
+
+            goToStep(2);
+            document.getElementById('loading-text').textContent = '💾 Saving advert...';
+
+            fetch(BASE_URL + '/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) {
+                    document.getElementById('loading-text').textContent = '❌ ' + (data.error || 'Save failed');
+                    return;
+                }
+                document.getElementById('save-info').innerHTML =
+                    'Advert saved!<br><br>' +
+                    '<span style="font-size:13px;opacity:0.7;">ID: ' + data.id + '</span><br><br>' +
+                    '<span style="font-size:12px;opacity:0.5;">You can view it on the server</span>';
+                goToStep(5);
+            })
+            .catch(function(err) {
+                document.getElementById('loading-text').textContent = '❌ Error: ' + err.message;
+            });
+        }
+
+        function stepBack() {
+            goToStep(3);
+        }
+
+        // ── SDK Init ────────────────────────────────────────
+        var sdkReady = false;
+        function onSDK() {
+            try {
+                if (window.Telegram && window.Telegram.WebApp) {
+                    tg = window.Telegram.WebApp;
+                    sdkReady = true;
+                    tg.ready();
+                    tg.expand();
+                    var user = tg.initDataUnsafe?.user;
+                    if (user) {
+                        document.getElementById('title').textContent = '📸 Hi ' + user.first_name + '!';
+                    }
+                    tg.BackButton.onClick(function() {
+                        if (document.querySelector('.screen.active')?.id === 'screen-camera') {
+                            tg.close();
+                        } else {
+                            resetAll();
+                        }
+                    });
+                    tg.BackButton.show();
+                }
+            } catch(e) {}
+        }
+        var pollTimer = setInterval(function() {
+            if (!sdkReady && window.Telegram && window.Telegram.WebApp) { onSDK(); clearInterval(pollTimer); }
+        }, 500);
+        setTimeout(function() { clearInterval(pollTimer); }, 10000);
+    </script>
+</body>
+</html>

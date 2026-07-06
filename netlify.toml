@@ -1,0 +1,12 @@
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+
+[[redirects]]
+  from = "/"
+  to = "/webapp.html"
+  status = 200
