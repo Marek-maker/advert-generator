@@ -16,6 +16,126 @@ PHOTOS_DB = os.path.join(UPLOAD_DIR, "_received.json")
 ADVERTS_DIR = os.path.join(BASE_DIR, "adverts")
 os.makedirs(ADVERTS_DIR, exist_ok=True)
 
+HERMES_HOME = os.path.join(os.environ.get("HOME", "C:/Users/ratze"), "AppData/Local/hermes")
+INDEX_PATH = os.path.join(HERMES_HOME, "biznis_index.json")
+SHEET_ID = "1P5xuT4QJBpKaEVi0vDNgAdO1UQQzh6C39k0L8FhrFhQ"
+
+# ── Stock Matching ────────────────────────────────────────────────
+
+STOCK_INDEX_CACHE = None
+
+def load_stock_index():
+    global STOCK_INDEX_CACHE
+    if STOCK_INDEX_CACHE is not None:
+        return STOCK_INDEX_CACHE
+    if not os.path.exists(INDEX_PATH):
+        print(f"  ⚠ No stock index at {INDEX_PATH}")
+        return {}
+    with open(INDEX_PATH, encoding="utf-8") as f:
+        STOCK_INDEX_CACHE = json.load(f)
+    print(f"  📦 Stock index loaded: {len(STOCK_INDEX_CACHE)} items")
+    return STOCK_INDEX_CACHE
+
+def invalidate_stock_cache():
+    global STOCK_INDEX_CACHE
+    STOCK_INDEX_CACHE = None
+
+def extract_models(text):
+    """Extract model numbers from text (e.g. GA-F2A68HM-DS2, G43MX, K8V-X SE)."""
+    if not text:
+        return set()
+    BRANDS = {"gigabyte", "foxconn", "asus", "intel", "amd", "nvidia", "kingston",
+              "samsung", "dell", "hp", "lenovo", "a4tech", "logitech", "sony",
+              "western", "seagate", "toshiba", "fujitsu", "hitachi", "liteon",
+              "zalman", "benq", "philips", "sencor", "patriot", "lg", "nec",
+              "brocade", "cisco", "finisar", "netgear", "nortel", "avaya",
+              "infineon", "corus", "picolight", "jdsu", "adva", "agilent",
+              "problabs", "d-link", "hp", "fujitsu", "ocz", "corsair"}
+    models = set()
+    # Model patterns: alphanumeric with dashes, >4 chars, containing digits
+    for m in re.findall(r'\b[A-Za-z0-9][A-Za-z0-9\-\./]+[A-Za-z0-9]\b', text):
+        low = m.lower()
+        if len(m) >= 4 and low not in BRANDS and not low.isalpha():
+            models.add(low)
+    return models
+
+def match_stock_items(analysis_text, category, params_text, top_n=3):
+    """Try to match Gemini analysis results to stock items."""
+    from difflib import SequenceMatcher
+
+    index = load_stock_index()
+    if not index:
+        return []
+
+    query_text = f"{analysis_text or ''} {params_text or ''}"
+    query_models = extract_models(query_text)
+    query_lower = query_text.lower()
+
+    scores = []  # [(poradie, score, item)]
+
+    for poradie, item in index.items():
+        name = item.get("nazov", "").lower()
+        cat = item.get("kategoria", "").lower()
+        item_text = f"{name} {cat}"
+        item_models = extract_models(item.get("nazov", ""))
+
+        # 1) Exact model match (highest confidence)
+        shared = query_models & item_models
+        if shared:
+            base = 0.85
+            bonus = min(len(shared) * 0.1, 0.15)
+            scores.append((poradie, base + bonus, item, "model"))
+            continue
+
+        # 2) Fuzzy name similarity
+        ratio = SequenceMatcher(None, query_lower[:50], name[:50]).ratio()
+        if ratio > 0.4:
+            scores.append((poradie, ratio, item, "name"))
+
+        # 3) Partial token match (e.g. "DDR3" in both query and item)
+        query_tokens = set(re.findall(r'\b[a-z0-9]+\b', query_lower))
+        item_tokens = set(re.findall(r'\b[a-z0-9]+\b', name))
+        # Only count meaningful tokens (>=3 chars, not stopwords)
+        stopwords = {"the", "and", "for", "with", "from", "sas", "gb", "tb", "hz", "cmos"}
+        query_tokens = {t for t in query_tokens if len(t) >= 3 and t not in stopwords}
+        item_tokens = {t for t in item_tokens if len(t) >= 3 and t not in stopwords}
+        if query_tokens and item_tokens:
+            overlap = len(query_tokens & item_tokens)
+            total = len(query_tokens | item_tokens)
+            if total > 0:
+                jaccard = overlap / total
+                if jaccard > 0.25 and ratio > 0.2:
+                    combined = max(ratio, jaccard) * 0.8 + min(ratio, jaccard) * 0.2
+                    if combined > 0.3:
+                        scores.append((poradie, combined, item, "token"))
+
+    # Deduplicate: keep highest score per poradie
+    best_per_item = {}
+    for poradie, score, item, method in scores:
+        if poradie not in best_per_item or score > best_per_item[poradie][0]:
+            best_per_item[poradie] = (score, item, method)
+
+    # Sort by score descending, take top N with score >= 0.35
+    ranked = sorted(best_per_item.items(), key=lambda x: -x[1][0])
+    results = []
+    for poradie, (score, item, method) in ranked:
+        if score >= 0.35:
+            results.append({
+                "poradie": poradie,
+                "score": round(score, 2),
+                "method": method,
+                "nazov": item.get("nazov", ""),
+                "kategoria": item.get("kategoria", ""),
+                "predajna_cena": item.get("predajna_cena", ""),
+                "pocet": item.get("pocet", "1"),
+                "photos_count": len(item.get("photos", [])),
+                "stav": item.get("stav", "sklad"),
+            })
+        if len(results) >= top_n:
+            break
+
+    return results
+
 # ── Category Templates ────────────────────────────────────────────
 
 TEMPLATES = {
@@ -192,6 +312,8 @@ class AdvertHandler(SimpleHTTPRequestHandler):
             self.handle_save(origin)
         elif self.path == "/categories":
             self.handle_categories(origin)
+        elif self.path == "/pair":
+            self.handle_pair(origin)
         else:
             self.send_error(404)
 
@@ -272,6 +394,16 @@ class AdvertHandler(SimpleHTTPRequestHandler):
                 val = field.get("default", "")
             filled[k] = val
 
+        # ── Stock matching ─────────────────────────────────
+        params_text = " ".join(f"{k}:{v}" for k, v in params.items() if v)
+        matches = match_stock_items(
+            analysis_text=analysis.get("description", ""),
+            category=category,
+            params_text=params_text,
+            top_n=3,
+        )
+        match_status = "matched" if matches else "none"
+
         result = {
             "ok": True,
             "status": "complete",
@@ -281,6 +413,8 @@ class AdvertHandler(SimpleHTTPRequestHandler):
             "filled": filled,
             "description": analysis.get("description", ""),
             "photo": entry,
+            "matches": matches,
+            "match_status": match_status,
             "timing": {"gemini_ms": gemini_ms, "total_ms": total_ms},
         }
         self._json(result, origin)
@@ -338,6 +472,104 @@ class AdvertHandler(SimpleHTTPRequestHandler):
         cats = {k: {"emoji": v["emoji"], "fields": v["fields"]} for k, v in TEMPLATES.items()}
         self._json({"ok": True, "categories": cats}, origin)
 
+    # ── Pair photo with stock item ─────────────────────────
+    def handle_pair(self, origin):
+        content_len = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_len)
+        try:
+            data = json.loads(body.decode("utf-8"))
+        except:
+            self._json({"ok": False, "error": "Bad JSON"}, origin)
+            return
+
+        poradie = str(data.get("poradie", ""))
+        action = data.get("action", "pair")  # 'pair' or 'increase'
+        photo = data.get("photo", {})
+        description = data.get("description", "")
+
+        if not poradie:
+            self._json({"ok": False, "error": "Missing poradie"}, origin)
+            return
+
+        # Load and update index
+        index = load_stock_index()
+        if poradie not in index:
+            self._json({"ok": False, "error": f"Item #{poradie} not found"}, origin)
+            return
+
+        item = index[poradie]
+
+        if action == "pair":
+            # Add photo reference
+            if photo and photo.get("filename"):
+                photo_ref = {
+                    "file": photo["filename"],
+                    "path": "(uploaded)",
+                    "id": photo.get("id", ""),
+                }
+                if "photos" not in item:
+                    item["photos"] = []
+                # Avoid duplicates
+                if photo_ref not in item["photos"]:
+                    item["photos"].append(photo_ref)
+
+            # Update stav
+            item["stav"] = "nafotené"
+            item["last_check"] = str(datetime.now().date())
+            item["poznamky"] = (item.get("poznamky", "") + f"; {description}" if description and description not in item.get("nazov", "") else item.get("poznamky", ""))
+            msg = f"Photo paired with #{poradie} ({item['nazov']})"
+
+        elif action == "increase":
+            # Increase quantity
+            current_qty = int(item.get("pocet", "1") or "1")
+            item["pocet"] = str(current_qty + 1)
+            item["last_check"] = str(datetime.now().date())
+            msg = f"Count increased for #{poradie}: {current_qty} → {current_qty + 1}"
+
+        else:
+            self._json({"ok": False, "error": f"Unknown action: {action}"}, origin)
+            return
+
+        # Write updated index
+        with open(INDEX_PATH, "w", encoding="utf-8") as f:
+            json.dump(index, f, indent=2, ensure_ascii=False)
+        invalidate_stock_cache()
+
+        # Also try to update Google Sheets (silently if it fails)
+        try:
+            sys.path.insert(0, os.path.join(HERMES_HOME, "skills/productivity/google-workspace/scripts"))
+            from google_api import build_service
+            service = build_service("sheets", "v4")
+
+            row_num = int(poradie) + 1  # +1 for header
+            if action == "pair" and photo.get("filename"):
+                # Could add photo URL to a notes column
+                pass
+
+            # Update pocet (column D) if increased
+            if action == "increase":
+                service.spreadsheets().values().update(
+                    spreadsheetId=SHEET_ID,
+                    range=f"D{row_num}",
+                    valueInputOption="USER_ENTERED",
+                    body={"values": [[item["pocet"]]]}
+                ).execute()
+
+            self._json({"ok": True, "message": msg, "poradie": poradie, "item": {
+                "nazov": item.get("nazov", ""),
+                "pocet": item.get("pocet", "1"),
+                "photos_count": len(item.get("photos", [])),
+                "stav": item.get("stav", "sklad"),
+            }}, origin)
+        except Exception as e:
+            # Still succeed — index is updated locally
+            self._json({"ok": True, "message": msg + " (Sheet sync skipped)", "poradie": poradie, "item": {
+                "nazov": item.get("nazov", ""),
+                "pocet": item.get("pocet", "1"),
+                "photos_count": len(item.get("photos", [])),
+                "stav": item.get("stav", "sklad"),
+            }}, origin)
+
     def _json(self, obj, origin):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
@@ -358,6 +590,8 @@ def main():
     print(f"📁 Uploads: {UPLOAD_DIR if os.path.exists(UPLOAD_DIR) else 'disabled'}")
     print(f"📁 Adverts: {ADVERTS_DIR if os.path.exists(ADVERTS_DIR) else 'disabled'}")
     print(f"🔑 Gemini key: {'found' if get_gemini_api_key() else 'MISSING'}")
+    stock_count = len(load_stock_index())
+    print(f"📦 Stock index: {stock_count} items ({INDEX_PATH})")
     server.serve_forever()
 
 if __name__ == "__main__":

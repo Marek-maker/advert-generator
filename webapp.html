@@ -181,6 +181,24 @@
 
     <!-- ══════ STEP 3: RESULTS + FORM ══════ -->
     <div class="screen" id="screen-form">
+        <!-- ── Match Card ──────────────────────── -->
+        <div class="card" id="match-card" style="display:none; border:2px solid #27ae60;">
+            <h2>🔗 Zhoda v sklade</h2>
+            <div id="match-content"></div>
+            <div class="row" id="match-actions" style="margin-top:8px;">
+                <button class="gr" id="btn-pair" onclick="doPair('pair')">✅ Spárovať fotku</button>
+                <button class="or" id="btn-increase" onclick="doPair('increase')">📦 +1 kus</button>
+                <button class="gy" id="btn-skip" onclick="skipMatch()">❌ Je to iné</button>
+            </div>
+            <p id="match-result" style="display:none;font-size:13px;margin:6px 0 0 0;text-align:center;"></p>
+        </div>
+
+        <!-- ── No-match card ───────────────────── -->
+        <div class="card" id="nomatch-card" style="display:none;">
+            <h2>🆕 Nová položka</h2>
+            <p style="font-size:13px;opacity:0.7;">Nenašla sa zhoda v sklade. Vyplň parametre a vytvor inzerát.</p>
+        </div>
+
         <div class="card">
             <h2>📋 Detected Item</h2>
             <p id="detected-cat" style="font-size:14px;margin:4px 0;"></p>
@@ -231,6 +249,7 @@
         var BASE_URL = IS_NETLIFY && RENDER_BACKEND ? RENDER_BACKEND : window.location.protocol + '//' + window.location.host;
         var tg = null, currentPhotoB64 = null, currentPhotoMeta = null;
         var currentCategory = null, currentFields = null, currentFilled = {};
+        var currentMatches = [], currentMatchSkip = false;
 
         // ── Step navigation ─────────────────────────────────
         function goToStep(n) {
@@ -249,9 +268,14 @@
             currentCategory = null;
             currentFields = null;
             currentFilled = {};
+            currentMatches = [];
+            currentMatchSkip = false;
             document.getElementById('photo-preview').style.display = 'none';
             document.getElementById('form-fields').innerHTML = '';
             document.getElementById('desc-box').innerHTML = '';
+            document.getElementById('match-card').style.display = 'none';
+            document.getElementById('nomatch-card').style.display = 'none';
+            document.getElementById('match-result').style.display = 'none';
             goToStep(1);
         }
 
@@ -354,6 +378,46 @@
             currentFields = data.fields;
             currentFilled = data.filled || {};
             currentPhotoMeta = data.photo;
+            currentMatches = data.matches || [];
+            currentMatchSkip = false;
+
+            // ── Show match / no-match card ─────────────
+            var matchCard = document.getElementById('match-card');
+            var nomatchCard = document.getElementById('nomatch-card');
+            var matchContent = document.getElementById('match-content');
+            var matchResult = document.getElementById('match-result');
+            matchResult.style.display = 'none';
+            matchCard.style.display = 'none';
+            nomatchCard.style.display = 'none';
+
+            if (currentMatches.length > 0) {
+                var m = currentMatches[0];
+                var scorePct = Math.round(m.score * 100);
+                var price = m.predajna_cena;
+                if (price === '_' || price === ':' || price === ':_' || price === '' || price === ' ') {
+                    price = '?';
+                } else {
+                    price = price + ' €';
+                }
+                var matchHtml = '<p style="font-size:16px;font-weight:600;">#' + m.poradie + ' — ' + htmlEncode(m.nazov) + '</p>' +
+                    '<p style="font-size:13px;opacity:0.7;">🏷️ ' + price + ' | 📁 ' + htmlEncode(m.kategoria) +
+                    ' | 📸 ' + m.photos_count + ' fotiek | 🔗 ' + scorePct + '% zhoda</p>';
+                if (currentMatches.length > 1) {
+                    matchHtml += '<details style="margin-top:6px;font-size:12px;"><summary>Ďalšie možné zhody (' + (currentMatches.length - 1) + ')</summary>';
+                    for (var i = 1; i < currentMatches.length; i++) {
+                        var mm = currentMatches[i];
+                        matchHtml += '<p style="margin:4px 0;">#' + mm.poradie + ' ' + htmlEncode(mm.nazov) + ' (' + Math.round(mm.score * 100) + '%)</p>';
+                    }
+                    matchHtml += '</details>';
+                }
+                matchContent.innerHTML = matchHtml;
+                document.getElementById('btn-pair').style.display = '';
+                document.getElementById('btn-increase').style.display = '';
+                document.getElementById('btn-skip').style.display = '';
+                matchCard.style.display = 'block';
+            } else {
+                nomatchCard.style.display = 'block';
+            }
 
             var timeTaken = data.timing ? (' (took ' + data.timing.gemini_ms + 'ms)') : '';
             document.getElementById('detected-cat').innerHTML =
@@ -418,6 +482,55 @@
             .catch(function(err) {
                 document.getElementById('loading-text').textContent = '❌ Error: ' + err.message;
             });
+        }
+
+        // ── Stock Pairing ────────────────────────────────────
+        function doPair(action) {
+            var m = currentMatches[0];
+            if (!m) return;
+            var btn = document.getElementById('btn-pair');
+            var btn2 = document.getElementById('btn-increase');
+            var result = document.getElementById('match-result');
+            btn.disabled = true;
+            btn2.disabled = true;
+
+            apiFetch('/pair', {
+                poradie: m.poradie,
+                action: action,
+                photo: currentPhotoMeta,
+                description: document.getElementById('detected-desc').textContent
+            })
+            .then(function(data) {
+                if (!data.ok) {
+                    result.textContent = '❌ ' + (data.error || 'Failed');
+                    result.style.display = 'block';
+                    result.style.color = '#c00';
+                    btn.disabled = false;
+                    btn2.disabled = false;
+                    return;
+                }
+                var icon = action === 'pair' ? '✅' : '📦';
+                result.innerHTML = icon + ' ' + data.message + '<br><span style="font-size:11px;opacity:0.6;">' +
+                    'Stav: ' + data.item.stav + ' | Počet: ' + data.item.pocet + ' | Fotiek: ' + data.item.photos_count + '</span>';
+                result.style.display = 'block';
+                result.style.color = '#27ae60';
+                document.getElementById('btn-skip').style.display = 'none';
+                // Mark as paired so user can still edit form
+                currentMatchSkip = true;
+            })
+            .catch(function(err) {
+                result.textContent = '❌ Network error: ' + err.message;
+                result.style.display = 'block';
+                result.style.color = '#c00';
+                btn.disabled = false;
+                btn2.disabled = false;
+            });
+        }
+
+        function skipMatch() {
+            currentMatchSkip = true;
+            var matchCard = document.getElementById('match-card');
+            matchCard.style.display = 'none';
         }
 
         // ── Save ────────────────────────────────────────────
