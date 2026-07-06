@@ -96,44 +96,15 @@ def get_gemini_api_key():
     return None
 
 def analyze_image(image_b64):
-    """Send image to Gemini and get structured analysis."""
+    """Send image to Gemini and get structured analysis (fast)."""
     api_key = get_gemini_api_key()
     if not api_key:
         return {"error": "No Gemini API key"}
 
-    prompt = """Analyze this image of tech hardware. Identify what it is and extract parameters.
+    # Fast model + short prompt
+    prompt = "Identify this tech item. Return JSON: {\"category\":\"RAM|Notebook|Monitor|Other\",\"description\":\"brief 1-line\",\"parameters\":{all detectable specs}}. Fill only what you see, empty strings for unknown."
 
-Return JSON ONLY with this structure:
-{
-  "category": "RAM" | "Notebook" | "Monitor" | "Other",
-  "description": "Brief 1-sentence description",
-  "parameters": {
-    "brand": "detected brand or empty string",
-    "model": "detected model or empty string",
-    "capacity": "detected capacity or empty string",
-    "speed": "detected speed or empty string",
-    "type": "detected type like DDR3/DDR4",
-    "form_factor": "SODIMM or DIMM if applicable",
-    "part_number": "detected part number or empty string",
-    "condition": "estimated condition",
-    "processor": "detected CPU if notebook",
-    "ram": "detected RAM size if notebook",
-    "storage": "detected storage if notebook",
-    "screen_size": "detected screen size",
-    "resolution": "detected resolution",
-    "gpu": "detected GPU",
-    "panel_type": "IPS/TN/VA/OLED if monitor",
-    "refresh_rate": "detected refresh rate",
-    "connectivity": "detected ports",
-    "color": "detected color",
-    "year": "estimated year",
-    "size": "detected size for monitor"
-  }
-}
-
-Only fill what you can see. Empty string for unknown fields."""
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite-001:generateContent?key={api_key}"
     payload = {
         "contents": [{"parts": [
             {"text": prompt},

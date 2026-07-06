@@ -274,11 +274,25 @@
             if (!file) return;
             var reader = new FileReader();
             reader.onload = function(ev) {
-                currentPhotoB64 = ev.target.result;
-                var preview = document.getElementById('photo-preview');
-                preview.src = currentPhotoB64;
-                preview.style.display = 'block';
-                startAnalysis();
+                // Compress BEFORE sending to server
+                var raw = ev.target.result;
+                var img = new Image();
+                img.onload = function() {
+                    var maxW = 250;
+                    var w = img.width, h = img.height;
+                    if (w > maxW) { h = h * maxW / w; w = maxW; }
+                    var c = document.createElement('canvas');
+                    c.width = w; c.height = h;
+                    c.getContext('2d').drawImage(img, 0, 0, w, h);
+                    var compressed = c.toDataURL('image/jpeg', 0.6);
+                    var kb = (compressed.length / 1024).toFixed(1);
+                    currentPhotoB64 = compressed;
+                    var preview = document.getElementById('photo-preview');
+                    preview.src = currentPhotoB64;
+                    preview.style.display = 'block';
+                    startAnalysis();
+                };
+                img.src = raw;
             };
             reader.readAsDataURL(file);
         });
@@ -286,7 +300,19 @@
         // ── Analyze ────────────────────────────────────────
         function startAnalysis() {
             goToStep(2);
-            document.getElementById('loading-text').textContent = 'Sending photo to AI vision...';
+            var steps = [
+                '📸 Compressing photo...',
+                '☁️ Uploading to server...',
+                '🧠 AI analyzing image...',
+                '📋 Extracting parameters...'
+            ];
+            var i = 0;
+            var timer = setInterval(function() {
+                if (i < steps.length) {
+                    document.getElementById('loading-text').textContent = steps[i];
+                    i++;
+                }
+            }, 1500);
 
             var payload = JSON.stringify({ photos: [currentPhotoB64], total: 1 });
 
@@ -297,19 +323,20 @@
             })
             .then(function(r) { return r.json(); })
             .then(function(data) {
+                clearInterval(timer);
                 if (!data.ok) {
                     document.getElementById('loading-text').textContent = '❌ ' + (data.error || 'Analysis failed');
                     return;
                 }
                 if (data.status === 'analyzing') {
                     document.getElementById('loading-text').textContent = '⏳ Waiting for AI results...';
-                    // Poll for result (re-upload same photo)
                     setTimeout(function() { startAnalysis(); }, 2000);
                     return;
                 }
                 showForm(data);
             })
             .catch(function(err) {
+                clearInterval(timer);
                 document.getElementById('loading-text').textContent = '❌ Network error: ' + err.message;
             });
         }
