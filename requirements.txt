@@ -1,0 +1,2 @@
+# No external dependencies — pure Python stdlib
+# (http.server, urllib, json, base64, re)
