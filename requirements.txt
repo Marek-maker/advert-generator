@@ -1,3 +1,2 @@
-# No external dependencies — pure Python stdlib
-# http.server, urllib, json, base64, re — all built-in
-# Google API client is optional (Sheet sync only)
+flask>=3.0
+flask-cors>=4.0
