@@ -298,6 +298,17 @@
         });
 
         // ── Analyze ────────────────────────────────────────
+        function apiFetch(path, body) {
+            return fetch(BASE_URL + path, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Bypass-Tunnel-Reminder': 'true'
+                },
+                body: JSON.stringify(body)
+            }).then(function(r) { return r.json(); });
+        }
+
         function startAnalysis() {
             goToStep(2);
             var steps = [
@@ -314,14 +325,7 @@
                 }
             }, 1500);
 
-            var payload = JSON.stringify({ photos: [currentPhotoB64], total: 1 });
-
-            fetch(BASE_URL + '/upload', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: payload
-            })
-            .then(function(r) { return r.json(); })
+            apiFetch('/upload', { photos: [currentPhotoB64], total: 1 })
             .then(function(data) {
                 clearInterval(timer);
                 if (!data.ok) {
@@ -397,14 +401,7 @@
             goToStep(2);
             document.getElementById('loading-text').textContent = '✍️ Generating advert description...';
 
-            var payload = JSON.stringify({ category: currentCategory, params: params });
-
-            fetch(BASE_URL + '/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: payload
-            })
-            .then(function(r) { return r.json(); })
+            apiFetch('/generate', { category: currentCategory, params: params })
             .then(function(data) {
                 if (!data.ok) {
                     document.getElementById('loading-text').textContent = '❌ ' + (data.error || 'Generation failed');
@@ -429,22 +426,16 @@
             }
 
             var desc = document.getElementById('desc-box').textContent || '';
-            var payload = JSON.stringify({
-                category: currentCategory,
-                params: params,
-                description: desc,
-                photo: currentPhotoMeta
-            });
 
             goToStep(2);
             document.getElementById('loading-text').textContent = '💾 Saving advert...';
 
-            fetch(BASE_URL + '/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: payload
+            apiFetch('/save', {
+                category: currentCategory,
+                params: params,
+                description: desc,
+                photo: currentPhotoMeta
             })
-            .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data.ok) {
                     document.getElementById('loading-text').textContent = '❌ ' + (data.error || 'Save failed');
