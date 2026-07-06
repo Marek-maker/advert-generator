@@ -18,6 +18,12 @@ os.makedirs(ADVERTS_DIR, exist_ok=True)
 
 HERMES_HOME = os.path.join(os.environ.get("HOME", "C:/Users/ratze"), "AppData/Local/hermes")
 INDEX_PATH = os.path.join(HERMES_HOME, "biznis_index.json")
+
+# Also check project-local data/ dir (for Render deployment)
+_PROJECT_INDEX = os.path.join(BASE_DIR, "data", "biznis_index.json")
+if not os.path.exists(INDEX_PATH) and os.path.exists(_PROJECT_INDEX):
+    INDEX_PATH = _PROJECT_INDEX
+
 SHEET_ID = "1P5xuT4QJBpKaEVi0vDNgAdO1UQQzh6C39k0L8FhrFhQ"
 
 # ── Stock Matching ────────────────────────────────────────────────
