@@ -387,6 +387,62 @@ def pair():
     })
 
 
+# ── Swiss Knife receive endpoint ─────────────────────────────────────
+
+SUBMISSIONS_DIR = os.path.join(BASE_DIR, "data", "swiss")
+os.makedirs(SUBMISSIONS_DIR, exist_ok=True)
+
+
+@app.route("/receive", methods=["POST", "OPTIONS"])
+def receive():
+    if request.method == "OPTIONS":
+        return jsonify({"ok": True})
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"ok": False, "error": "Bad JSON"}), 400
+
+    # Generate unique ID
+    import hashlib
+    raw = f"{data.get('timestamp','')}-{os.urandom(4).hex()}"
+    sid = hashlib.md5(raw.encode()).hexdigest()[:12]
+
+    submission = {
+        "id": sid,
+        "text": data.get("text", ""),
+        "photo": data.get("photo", None),
+        "mode": data.get("mode", "text"),
+        "tag": data.get("tag", "general"),
+        "app": data.get("app", "swiss-knife"),
+        "user": data.get("user", "unknown"),
+        "user_id": data.get("user_id"),
+        "timestamp": data.get("timestamp", ""),
+        "received_at": datetime.utcnow().isoformat(),
+        "status": "pending",
+    }
+
+    path = os.path.join(SUBMISSIONS_DIR, f"{sid}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(submission, f, ensure_ascii=False)
+
+    print(f"🧰 Swiss Knife received: {sid} ({submission['mode']}, {submission['tag']})")
+    return jsonify({"ok": True, "id": sid})
+
+
+@app.route("/receive/list", methods=["GET"])
+def receive_list():
+    """List pending submissions (for the agent to process)."""
+    pending = []
+    for fn in sorted(os.listdir(SUBMISSIONS_DIR), reverse=True):
+        if fn.endswith(".json"):
+            fpath = os.path.join(SUBMISSIONS_DIR, fn)
+            with open(fpath, encoding="utf-8") as f:
+                sub = json.load(f)
+            if sub.get("status") == "pending":
+                pending.append(sub)
+    return jsonify({"ok": True, "count": len(pending), "submissions": pending})
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     print(f"🚀 Advert Generator Flask on :{port}")

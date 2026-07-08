@@ -169,9 +169,8 @@
   <script src="https://telegram.org/js/telegram-web-app.js" async onload="onSDK()" onerror="onSDKError()"></script>
   <script>
     // ── Configuration ─────────────────────────────────
-    // Data is sent to Webhook.site — a free, persistent capture service.
-    // Your data stays there until I retrieve and process it.
-    var WEBHOOK_URL = 'https://webhook.site/16bdc711-2f46-4cbc-b81a-c44f6069ae8b';
+    // Data is sent to the PythonAnywhere backend (always-on, CORS-enabled).
+    var API_URL = 'https://MarekMaker.pythonanywhere.com/receive';
 
     // ── Globals ────────────────────────────────────────
     var tg = null;
@@ -304,9 +303,9 @@
         timestamp: new Date().toISOString()
       };
 
-      log('📤 POST to webhook (text:' + (text||'').length + ' chars, photo:' + (currentPhotoB64 ? 'yes (' + (currentPhotoB64.length/1024).toFixed(0) + 'KB)' : 'no') + ')');
+      log('📤 POST to API (text:' + (text||'').length + ' chars, photo:' + (currentPhotoB64 ? 'yes (' + (currentPhotoB64.length/1024).toFixed(0) + 'KB)' : 'no') + ')');
 
-      fetch(WEBHOOK_URL, {
+      fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
