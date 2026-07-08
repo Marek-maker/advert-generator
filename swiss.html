@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Swiss Knife</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--tg-theme-bg-color, #fff);
+      color: var(--tg-theme-text-color, #222);
+      padding: 14px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 20px; margin-bottom: 2px; }
+    .sub { font-size: 13px; opacity: 0.5; margin-bottom: 14px; }
+    .card {
+      background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+      border-radius: 12px;
+      padding: 16px;
+      margin: 10px 0;
+    }
+    .card h2 { font-size: 15px; margin-bottom: 8px; }
+    .label { font-size: 13px; font-weight: 600; margin: 10px 0 4px 0; }
+    textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--tg-theme-hint-color, #ccc);
+      border-radius: 8px;
+      font-size: 14px;
+      background: var(--tg-theme-bg-color, #fff);
+      color: var(--tg-theme-text-color, #222);
+      outline: none;
+      resize: vertical;
+      min-height: 80px;
+      font-family: inherit;
+    }
+    textarea:focus { border-color: var(--tg-theme-button-color, #2481cc); }
+    button {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin: 4px 0;
+      background: var(--tg-theme-button-color, #2481cc);
+      color: var(--tg-theme-button-text-color, #fff);
+      transition: opacity 0.2s;
+    }
+    button:active { opacity: 0.8; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    button.gr { background: #27ae60; }
+    button.rd { background: #e74c3c; }
+    button.gy { background: #888; }
+    button.or { background: #f39c12; }
+
+    .cam-input { display: none; }
+    #photo-preview {
+      width: 100%;
+      border-radius: 10px;
+      margin: 8px 0;
+      display: none;
+    }
+    #result-box {
+      display: none;
+      padding: 12px;
+      border-radius: 10px;
+      margin: 8px 0;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    #result-box.ok { display: block; background: rgba(39,174,96,0.12); color: #27ae60; }
+    #result-box.err { display: block; background: rgba(231,76,60,0.12); color: #e74c3c; }
+
+    #log {
+      background: #0d1117; color: #00ff88;
+      font-family: 'Courier New', monospace;
+      font-size: 11px; padding: 8px; border-radius: 8px;
+      margin: 6px 0; max-height: 100px; overflow-y: auto;
+      display: block; white-space: pre-wrap;
+    }
+
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #ddd;
+      border-top-color: var(--tg-theme-button-color, #2481cc);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 14px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading { display: none; text-align: center; padding: 10px; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--tg-theme-button-color, #2481cc);
+      color: var(--tg-theme-button-text-color, #fff);
+      margin-left: 6px;
+    }
+
+    .mode-select {
+      display: flex; gap: 6px; margin-bottom: 10px;
+    }
+    .mode-btn {
+      flex: 1; padding: 8px; border-radius: 8px; border: 2px solid transparent;
+      font-size: 13px; font-weight: 600; cursor: pointer; text-align: center;
+      background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+      color: var(--tg-theme-text-color, #222);
+      transition: all 0.2s;
+    }
+    .mode-btn.active {
+      border-color: var(--tg-theme-button-color, #2481cc);
+      background: rgba(36,129,204,0.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>🔧 Swiss Knife <span class="badge" id="app-badge">v1</span></h1>
+  <p class="sub" id="greeting">Send info — I'll process it when I'm back</p>
+
+  <div id="log">⏳ Loading...</div>
+
+  <!-- ══════ MODE SELECTOR ══════ -->
+  <div class="mode-select">
+    <div class="mode-btn active" id="mode-text" onclick="setMode('text')">📝 Text</div>
+    <div class="mode-btn" id="mode-photo" onclick="setMode('photo')">📸 Photo</div>
+    <div class="mode-btn" id="mode-both" onclick="setMode('both')">🔧 Both</div>
+  </div>
+
+  <!-- ══════ INPUT CARD ══════ -->
+  <div class="card">
+    <h2>📤 Send to Agent</h2>
+
+    <div class="label">📄 Text</div>
+    <textarea id="text-input" placeholder="Type whatever you want to send..." style="display:block;"></textarea>
+
+    <div class="label" id="photo-label" style="display:none;">📸 Photo</div>
+    <input type="file" id="cam-input" class="cam-input" accept="image/*" capture="environment">
+    <button id="snap-btn" style="display:none;" onclick="openCam()">📸 Snap Photo</button>
+    <button id="pick-btn" style="display:none;" class="gy" onclick="pickFile()">📁 Pick from Gallery</button>
+    <img id="photo-preview">
+
+    <div class="label">🏷️ Tag (optional — helps me sort)</div>
+    <input type="text" id="tag-input" placeholder="e.g. stock-photo, question, note, urgent" style="padding:10px 12px;border:1px solid var(--tg-theme-hint-color, #ccc);border-radius:8px;font-size:14px;width:100%;">
+
+    <div style="margin-top:12px;">
+      <button class="gr" onclick="submitData()">📤 Upload</button>
+      <button class="rd" onclick="resetForm()">🗑️ Cancel</button>
+    </div>
+  </div>
+
+  <!-- ══════ LOADING ══════ -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <p id="loading-text" style="text-align:center;font-size:14px;color:#888;">Sending...</p>
+  </div>
+
+  <!-- ══════ RESULT ══════ -->
+  <div id="result-box"></div>
+
+  <script src="https://telegram.org/js/telegram-web-app.js" async onload="onSDK()" onerror="onSDKError()"></script>
+  <script>
+    // ── Configuration ─────────────────────────────────
+    // Data is sent to Webhook.site — a free, persistent capture service.
+    // Your data stays there until I retrieve and process it.
+    var WEBHOOK_URL = 'https://webhook.site/16bdc711-2f46-4cbc-b81a-c44f6069ae8b';
+
+    // ── Globals ────────────────────────────────────────
+    var tg = null;
+    var currentPhotoB64 = null;
+    var currentMode = 'text';
+    var sdkReady = false;
+
+    // ── Logging ────────────────────────────────────────
+    var LOG = document.getElementById('log');
+    function log(msg) {
+      var el = document.createElement('div');
+      el.textContent = '> ' + msg;
+      LOG.appendChild(el);
+      LOG.scrollTop = LOG.scrollHeight;
+    }
+    log('JS loaded');
+    log('Mode: ' + currentMode);
+
+    // ── SDK Init ───────────────────────────────────────
+    function onSDK() {
+      try {
+        if (window.Telegram && window.Telegram.WebApp) {
+          tg = window.Telegram.WebApp;
+          sdkReady = true;
+          tg.ready();
+          tg.expand();
+          var user = tg.initDataUnsafe?.user;
+          if (user) {
+            document.getElementById('greeting').textContent = 'Hi ' + user.first_name + '! Send me info to process.';
+            log('User: ' + user.first_name + ' (id:' + user.id + ')');
+          }
+          tg.BackButton.onClick(function() { tg.close(); });
+          tg.BackButton.show();
+          log('✅ SDK ready');
+        }
+      } catch(e) {
+        log('❌ SDK init error: ' + e.message);
+      }
+    }
+    function onSDKError() {
+      log('⚠️ SDK script failed to load');
+    }
+    var pollTimer = setInterval(function() {
+      if (!sdkReady && window.Telegram && window.Telegram.WebApp) { onSDK(); clearInterval(pollTimer); }
+    }, 500);
+    setTimeout(function() { clearInterval(pollTimer); log('⚠️ SDK poll timeout'); }, 10000);
+
+    // ── Mode switching ─────────────────────────────────
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('mode-text').className = 'mode-btn' + (mode === 'text' ? ' active' : '');
+      document.getElementById('mode-photo').className = 'mode-btn' + (mode === 'photo' ? ' active' : '');
+      document.getElementById('mode-both').className = 'mode-btn' + (mode === 'both' ? ' active' : '');
+
+      var showText = mode === 'text' || mode === 'both';
+      var showPhoto = mode === 'photo' || mode === 'both';
+
+      document.getElementById('text-input').style.display = showText ? 'block' : 'none';
+      document.getElementById('photo-label').style.display = showPhoto ? 'block' : 'none';
+      document.getElementById('snap-btn').style.display = showPhoto ? 'block' : 'none';
+      document.getElementById('pick-btn').style.display = showPhoto ? 'block' : 'none';
+
+      document.getElementById('app-badge').textContent = mode;
+      log('📋 Mode: ' + mode);
+    }
+
+    // ── Camera ─────────────────────────────────────────
+    function openCam() {
+      var input = document.getElementById('cam-input');
+      input.value = '';
+      input.click();
+    }
+    function pickFile() {
+      var input = document.getElementById('cam-input');
+      input.value = '';
+      input.removeAttribute('capture');
+      input.click();
+      input.setAttribute('capture', 'environment');
+    }
+    document.getElementById('cam-input').addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      if (!file) return;
+      log('File: ' + file.name + ' (' + (file.size/1024).toFixed(0) + 'KB)');
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        var raw = ev.target.result;
+        var img = new Image();
+        img.onload = function() {
+          var maxW = 250;
+          var w = img.width, h = img.height;
+          if (w > maxW) { h = h * maxW / w; w = maxW; }
+          var c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          currentPhotoB64 = c.toDataURL('image/jpeg', 0.6);
+          var kb = (currentPhotoB64.length / 1024).toFixed(1);
+          log('📸 Photo compressed: ' + w + 'x' + h + ' (' + kb + 'KB)');
+          var preview = document.getElementById('photo-preview');
+          preview.src = currentPhotoB64;
+          preview.style.display = 'block';
+        };
+        img.src = raw;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // ── Submit ─────────────────────────────────────────
+    function submitData() {
+      var text = document.getElementById('text-input').value.trim();
+      var tag = document.getElementById('tag-input').value.trim() || 'general';
+
+      var hasText = currentMode === 'text' || currentMode === 'both';
+      var hasPhoto = currentMode === 'photo' || currentMode === 'both';
+
+      if (hasText && !text && !currentPhotoB64) {
+        showResult('Please enter some text or take a photo first.', false);
+        return;
+      }
+
+      showLoading('📤 Uploading...');
+
+      var payload = {
+        text: text || '',
+        photo: currentPhotoB64 || null,
+        mode: currentMode,
+        tag: tag,
+        app: 'swiss-knife',
+        user: tg ? (tg.initDataUnsafe?.user?.first_name || 'unknown') : 'browser',
+        user_id: tg ? (tg.initDataUnsafe?.user?.id || null) : null,
+        timestamp: new Date().toISOString()
+      };
+
+      log('📤 POST to webhook (text:' + (text||'').length + ' chars, photo:' + (currentPhotoB64 ? 'yes (' + (currentPhotoB64.length/1024).toFixed(0) + 'KB)' : 'no') + ')');
+
+      fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(function(r) {
+        hideLoading();
+        if (r.ok) {
+          log('✅ Sent!');
+          showResult('✅ Sent to processing queue!\n\nTag: ' + tag + '\nWhen I\'m back, I\'ll process this.', true);
+          document.getElementById('text-input').value = '';
+          document.getElementById('tag-input').value = '';
+          currentPhotoB64 = null;
+          document.getElementById('photo-preview').style.display = 'none';
+        } else {
+          log('❌ Server returned ' + r.status);
+          showResult('❌ Server error: HTTP ' + r.status, false);
+        }
+      })
+      .catch(function(err) {
+        hideLoading();
+        log('❌ Network error: ' + err.message);
+        showResult('❌ Network error: ' + err.message + '\n\nYour data was NOT sent. Try again later.', false);
+      });
+    }
+
+    // ── UI Helpers ─────────────────────────────────────
+    function showLoading(msg) {
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('loading-text').textContent = msg || '⏳ Sending...';
+    }
+    function hideLoading() {
+      document.getElementById('loading').style.display = 'none';
+    }
+    function showResult(msg, isOk) {
+      var box = document.getElementById('result-box');
+      box.textContent = msg;
+      box.className = isOk ? 'ok' : 'err';
+    }
+    function resetForm() {
+      document.getElementById('text-input').value = '';
+      document.getElementById('tag-input').value = '';
+      currentPhotoB64 = null;
+      document.getElementById('photo-preview').style.display = 'none';
+      document.getElementById('result-box').className = '';
+      document.getElementById('result-box').style.display = 'none';
+      log('🗑️ Form reset');
+    }
+  </script>
+</body>
+</html>
