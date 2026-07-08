@@ -169,8 +169,8 @@
   <script src="https://telegram.org/js/telegram-web-app.js" async onload="onSDK()" onerror="onSDKError()"></script>
   <script>
     // ── Configuration ─────────────────────────────────
-    // Data is sent to the PythonAnywhere backend (always-on, CORS-enabled).
-    var API_URL = 'https://MarekMaker.pythonanywhere.com/receive';
+    // Data is sent to the localtunnel backend (CORS-enabled, auto-deploys on git push).
+    var API_URL = 'https://swiss-knife-1.loca.lt/receive';
 
     // ── Globals ────────────────────────────────────────
     var tg = null;
@@ -307,7 +307,7 @@
 
       fetch(API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
         body: JSON.stringify(payload)
       })
       .then(function(r) {
