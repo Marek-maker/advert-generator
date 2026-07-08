@@ -213,6 +213,11 @@
             <p id="detected-desc" style="font-size:13px;opacity:0.7;"></p>
         </div>
         <div class="card">
+            <h2>🖼️ Photos (<span id="photo-count-label">1</span>)</h2>
+            <div id="photo-gallery" style="display:flex;gap:4px;flex-wrap:wrap;margin:4px 0;"></div>
+            <p id="photo-names" style="font-size:11px;opacity:0.5;margin-top:4px;"></p>
+        </div>
+        <div class="card">
             <h2>✏️ Parameters</h2>
             <div id="form-fields"></div>
         </div>
@@ -461,6 +466,22 @@
                 (data.emoji || '📦') + ' ' + data.category + '</span>' +
                 '<span style="font-size:11px;opacity:0.5;margin-left:8px;">' + timeTaken + '</span>';
             document.getElementById('detected-desc').textContent = data.description || '';
+
+            // ── Show uploaded photos ────────────────────
+            var allPhotos = data.photos || (data.photo ? [data.photo] : []);
+            var gallery = document.getElementById('photo-gallery');
+            gallery.innerHTML = '';
+            var names = [];
+            for (var pi = 0; pi < allPhotos.length; pi++) {
+                var p = allPhotos[pi];
+                var thumb = document.createElement('img');
+                thumb.src = BASE_URL + '/uploads/' + p.filename;
+                thumb.style.cssText = 'width:64px;height:64px;border-radius:6px;object-fit:cover;border:1px solid #ddd';
+                gallery.appendChild(thumb);
+                names.push(p.filename);
+            }
+            document.getElementById('photo-count-label').textContent = allPhotos.length;
+            document.getElementById('photo-names').textContent = '📁 ' + names.join(', ');
 
             // Build form
             var html = '';
