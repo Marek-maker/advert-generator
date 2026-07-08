@@ -159,14 +159,22 @@
     <!-- ══════ STEP 1: CAMERA ══════ -->
     <div class="screen active" id="screen-camera">
         <div class="card">
-            <h2>📸 Take a Photo</h2>
+            <h2>📸 Take Photos</h2>
             <p style="font-size:13px;opacity:0.6;margin-bottom:8px;">
-                Snap a photo of the item you want to sell (RAM, notebook, monitor, etc.)
+                Take multiple photos of the same item (all angles)
             </p>
             <input type="file" id="cam-input" class="cam-input" accept="image/*" capture="environment">
-            <button onclick="openCam()">📸 Snap Photo</button>
-            <button class="gy" onclick="pickFile()">📁 Pick from Gallery</button>
-            <img id="photo-preview" style="display:none">
+            <div class="row">
+                <button onclick="openCam()">📸 Snap Photo</button>
+                <button class="gy" onclick="pickFile()">📁 Gallery</button>
+            </div>
+            <div id="photo-queue" style="display:flex;gap:4px;flex-wrap:wrap;margin:8px 0;min-height:60px;"></div>
+            <div class="row">
+                <button id="upload-btn" class="gr" style="display:none" onclick="uploadAll()">
+                    ☁️ Upload & Analyze (<span id="photo-count">0</span> photos)
+                </button>
+                <button id="clear-btn" class="gy" style="display:none" onclick="clearQueue()">🗑️ Clear</button>
+            </div>
         </div>
     </div>
 
@@ -249,6 +257,7 @@
         var BASE_URL = IS_NETLIFY && RENDER_BACKEND ? RENDER_BACKEND : window.location.protocol + '//' + window.location.host;
         var tg = null, currentPhotoB64 = null, currentPhotoMeta = null;
         var currentCategory = null, currentFields = null, currentFilled = {};
+        var photoQueue = [];
         var currentMatches = [], currentMatchSkip = false;
 
         // ── Step navigation ─────────────────────────────────
@@ -268,6 +277,7 @@
             currentCategory = null;
             currentFields = null;
             currentFilled = {};
+            photoQueue = [];
             currentMatches = [];
             currentMatchSkip = false;
             document.getElementById('photo-preview').style.display = 'none';
@@ -298,7 +308,6 @@
             if (!file) return;
             var reader = new FileReader();
             reader.onload = function(ev) {
-                // Compress BEFORE sending to server
                 var raw = ev.target.result;
                 var img = new Image();
                 img.onload = function() {
@@ -309,17 +318,42 @@
                     c.width = w; c.height = h;
                     c.getContext('2d').drawImage(img, 0, 0, w, h);
                     var compressed = c.toDataURL('image/jpeg', 0.6);
-                    var kb = (compressed.length / 1024).toFixed(1);
-                    currentPhotoB64 = compressed;
-                    var preview = document.getElementById('photo-preview');
-                    preview.src = currentPhotoB64;
-                    preview.style.display = 'block';
-                    startAnalysis();
+                    photoQueue.push(compressed);
+                    updateQueue();
                 };
                 img.src = raw;
             };
             reader.readAsDataURL(file);
         });
+
+        function updateQueue() {
+            var queue = document.getElementById('photo-queue');
+            queue.innerHTML = '';
+            for (var i = 0; i < photoQueue.length; i++) {
+                var thumb = document.createElement('img');
+                thumb.src = photoQueue[i];
+                thumb.style.cssText = 'width:60px;height:60px;border-radius:6px;object-fit:cover;border:2px solid var(--tg-theme-button-color,#2481cc)';
+                queue.appendChild(thumb);
+            }
+            var hasPhotos = photoQueue.length > 0;
+            document.getElementById('upload-btn').style.display = hasPhotos ? 'block' : 'none';
+            document.getElementById('clear-btn').style.display = hasPhotos ? 'block' : 'none';
+            document.getElementById('photo-count').textContent = photoQueue.length;
+        }
+
+        function clearQueue() {
+            photoQueue = [];
+            updateQueue();
+        }
+
+        function uploadAll() {
+            if (photoQueue.length === 0) return;
+            currentPhotoB64 = photoQueue[0];
+            var remaining = photoQueue.slice(1);
+            photoQueue = [];
+            updateQueue();
+            startAnalysis(remaining);
+        }
 
         // ── Analyze ────────────────────────────────────────
         function apiFetch(path, body) {
@@ -333,8 +367,10 @@
             }).then(function(r) { return r.json(); });
         }
 
-        function startAnalysis() {
+        function startAnalysis(extraPhotos) {
             goToStep(2);
+            extraPhotos = extraPhotos || [];
+            var allPhotos = [currentPhotoB64].concat(extraPhotos);
             var startTime = Date.now();
             var elapsed = 0;
             var elapsedTimer = setInterval(function() {
@@ -356,7 +392,7 @@
                 }
             }, 1500);
 
-            apiFetch('/upload', { photos: [currentPhotoB64], total: 1 })
+            apiFetch('/upload', { photos: allPhotos, total: allPhotos.length })
             .then(function(data) {
                 clearInterval(elapsedTimer);
                 clearInterval(stepTimer);

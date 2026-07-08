@@ -440,6 +440,22 @@ class AdvertHandler(SimpleHTTPRequestHandler):
             with open(PHOTOS_DB, "w") as f:
                 json.dump(photo_list, f, indent=2)
 
+        # Save extra photos with same base name
+        base_name = os.path.splitext(fname)[0]  # e.g. "hynix_32gb1333" or "photo_abc123"
+        all_entries = [entry]
+        for i, extra_b64 in enumerate(photos_b64[1:], start=2):
+            extra_fn = f"{base_name}_{i}.jpg"
+            extra_fp = os.path.join(UPLOAD_DIR, extra_fn)
+            raw = extra_b64.split(",", 1)[1] if "," in extra_b64 else extra_b64
+            with open(extra_fp, "wb") as f:
+                f.write(base64.b64decode(raw))
+            extra_entry = {"id": uuid.uuid4().hex[:8], "filename": extra_fn, "path": extra_fp,
+                           "timestamp": ts, "size_bytes": os.path.getsize(extra_fp)}
+            photo_list.append(extra_entry)
+            all_entries.append(extra_entry)
+        with open(PHOTOS_DB, "w") as f:
+            json.dump(photo_list, f, indent=2)
+
         template = TEMPLATES[category]
         params = analysis.get("parameters", {})
 
@@ -471,6 +487,7 @@ class AdvertHandler(SimpleHTTPRequestHandler):
             "filled": filled,
             "description": analysis.get("description", ""),
             "photo": entry,
+            "photos": all_entries,
             "matches": matches,
             "match_status": match_status,
             "timing": {"gemini_ms": gemini_ms, "total_ms": total_ms},
