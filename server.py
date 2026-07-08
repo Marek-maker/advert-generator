@@ -259,6 +259,33 @@ def analyze_image(image_b64):
     except Exception as e:
         return {"error": str(e)}, int((time.time() - t0) * 1000)
 
+def smart_filename(analysis, category):
+    """Generate descriptive filename like hpprobook3456.jpg from analysis."""
+    params = analysis.get("parameters", {})
+    brand = (params.get("brand", "") or "").strip().lower()[:6]
+    model = (params.get("model", "") or "").strip().lower()[:15]
+    model = model.replace(" ", "").replace("-", "").replace("/", "")
+    cap = params.get("capacity", "").lower().replace("gb", "").strip()[:4]
+    speed = params.get("speed", "").lower().replace("mhz", "").strip()[:5]
+    
+    parts = []
+    if brand:
+        bmap = {"sk hynix": "hynix", "hewlett-packard": "hp", "hp": "hp",
+                "dell": "dell", "lenovo": "lenovo", "samsung": "samsung",
+                "kingston": "king", "apple": "apple", "asus": "asus", "acer": "acer"}
+        parts.append(bmap.get(brand, brand[:4]))
+    if model:
+        parts.append(model[:12])
+    if cap and speed:
+        parts.append(f"{cap}gb{speed}")
+    elif cap:
+        parts.append(f"{cap}gb")
+    
+    if not parts:
+        return None
+    name = "_".join(parts).replace(" ", "_").replace("__", "_").strip("_")
+    return name[:40]
+
 def generate_advert(params, template):
     """Generate advert description from filled template."""
     api_key = get_gemini_api_key()
@@ -391,6 +418,27 @@ class AdvertHandler(SimpleHTTPRequestHandler):
         category = analysis.get("category", "Other")
         if category not in TEMPLATES:
             category = "Other"
+
+        # Smart rename based on analysis
+        smart_name = smart_filename(analysis, category)
+        if smart_name:
+            new_fname = f"{smart_name}.jpg"
+            new_fpath = os.path.join(UPLOAD_DIR, new_fname)
+            # Avoid overwriting existing files
+            counter = 1
+            while os.path.exists(new_fpath):
+                new_fname = f"{smart_name}_{counter}.jpg"
+                new_fpath = os.path.join(UPLOAD_DIR, new_fname)
+                counter += 1
+            os.rename(fpath, new_fpath)
+            fname = new_fname
+            fpath = new_fpath
+            entry["filename"] = fname
+            entry["path"] = fpath
+            # Update DB
+            photo_list[-1] = entry
+            with open(PHOTOS_DB, "w") as f:
+                json.dump(photo_list, f, indent=2)
 
         template = TEMPLATES[category]
         params = analysis.get("parameters", {})
